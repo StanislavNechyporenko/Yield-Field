@@ -1,5 +1,10 @@
 import { erc20Abi, parseEther, parseUnits } from 'viem';
-import { switchChain, waitForTransactionReceipt, writeContract } from 'wagmi/actions';
+import {
+  readContract,
+  switchChain,
+  waitForTransactionReceipt,
+  writeContract,
+} from 'wagmi/actions';
 import { config } from '@/wagmi-config';
 import { monadMainnet, monadTestnet } from '@/utils/chains';
 
@@ -139,7 +144,10 @@ export const routerAbi = [
     type: 'function',
     name: 'zapMon',
     stateMutability: 'payable',
-    inputs: [{ name: 'vault', type: 'address' }],
+    inputs: [
+      { name: 'vault', type: 'address' },
+      { name: 'minSharesOut', type: 'uint256' },
+    ],
     outputs: [{ type: 'uint256' }],
   },
   {
@@ -149,10 +157,39 @@ export const routerAbi = [
     inputs: [
       { name: 'vault', type: 'address' },
       { name: 'assets', type: 'uint256' },
+      { name: 'minSharesOut', type: 'uint256' },
     ],
     outputs: [{ type: 'uint256' }],
   },
 ] as const;
+
+const previewAbi = [
+  {
+    type: 'function',
+    name: 'previewDeposit',
+    stateMutability: 'view',
+    inputs: [{ name: 'assets', type: 'uint256' }],
+    outputs: [{ type: 'uint256' }],
+  },
+] as const;
+
+const SLIPPAGE_BPS = 50n; // 0.5%
+
+/** Expected shares from the vault minus slippage tolerance; 0 disables the guard. */
+async function minSharesFor(vault: `0x${string}`, assets: bigint): Promise<bigint> {
+  try {
+    const preview = await readContract(config, {
+      address: vault,
+      abi: previewAbi,
+      functionName: 'previewDeposit',
+      args: [assets],
+      chainId: monadMainnet.id,
+    });
+    return (preview * (10_000n - SLIPPAGE_BPS)) / 10_000n;
+  } catch {
+    return 0n;
+  }
+}
 
 type ZapTarget =
   | { kind: 'native'; vault: `0x${string}` }
@@ -194,18 +231,21 @@ export async function zapInvest(
   await ensureChain(monadMainnet.id, 'Monad mainnet');
 
   if (zap.kind === 'native') {
+    const value = parseEther(amount.toString());
+    const minShares = await minSharesFor(zap.vault, value);
     onStatus('depositing');
     const hash = await writeContract(config, {
       address: ROUTER_ADDRESS,
       abi: routerAbi,
       functionName: 'zapMon',
-      args: [zap.vault],
-      value: parseEther(amount.toString()),
+      args: [zap.vault, minShares],
+      value,
       chainId: monadMainnet.id,
     });
     await waitForTransactionReceipt(config, { hash, chainId: monadMainnet.id });
   } else {
     const assets = parseUnits(amount.toString(), zap.decimals);
+    const minShares = await minSharesFor(zap.vault, assets);
     onStatus('approving');
     const approveHash = await writeContract(config, {
       address: zap.asset,
@@ -221,7 +261,7 @@ export async function zapInvest(
       address: ROUTER_ADDRESS,
       abi: routerAbi,
       functionName: 'zapErc20',
-      args: [zap.vault, assets],
+      args: [zap.vault, assets, minShares],
       chainId: monadMainnet.id,
     });
     await waitForTransactionReceipt(config, { hash, chainId: monadMainnet.id });

@@ -37,6 +37,8 @@ contract YieldZapRouter is Ownable, ReentrancyGuard {
     error ZeroAddress();
     error LengthMismatch();
     error PartsMustSumToValue();
+    error SlippageExceeded(uint256 shares, uint256 minShares);
+    error NativeTransferFailed();
 
     constructor(address wmon_) Ownable(msg.sender) {
         if (wmon_ == address(0)) revert ZeroAddress();
@@ -58,28 +60,45 @@ contract YieldZapRouter is Ownable, ReentrancyGuard {
         IERC20(token).safeTransfer(to, amount);
     }
 
+    /// @notice Rescue native MON force-sent here (e.g. via selfdestruct);
+    ///         plain transfers revert since the router has no receive().
+    function rescueNative(address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        (bool ok, ) = to.call{value: amount}("");
+        if (!ok) revert NativeTransferFailed();
+    }
+
     // ----------------------------------------------------------------- zaps
 
     /// @notice Deposit native MON into a WMON-denominated vault in one tx;
-    ///         shares are minted to the caller.
-    function zapMon(address vault) external payable nonReentrant returns (uint256 shares) {
-        shares = _zapMonTo(vault, msg.value);
+    ///         shares are minted to the caller. Reverts if the vault mints
+    ///         fewer than minSharesOut shares (slippage guard).
+    function zapMon(
+        address vault,
+        uint256 minSharesOut
+    ) external payable nonReentrant returns (uint256 shares) {
+        shares = _zapMonTo(vault, msg.value, minSharesOut);
     }
 
     /// @notice Split native MON across several WMON vaults in one transaction
     ///         ("diversify"): amounts must add up to msg.value.
     function diversifyMon(
         address[] calldata vaults,
-        uint256[] calldata amounts
+        uint256[] calldata amounts,
+        uint256[] calldata minSharesOut
     ) external payable nonReentrant {
-        if (vaults.length == 0 || vaults.length != amounts.length) revert LengthMismatch();
+        if (
+            vaults.length == 0 ||
+            vaults.length != amounts.length ||
+            vaults.length != minSharesOut.length
+        ) revert LengthMismatch();
         uint256 total;
         for (uint256 i = 0; i < amounts.length; i++) {
             total += amounts[i];
         }
         if (total != msg.value) revert PartsMustSumToValue();
         for (uint256 i = 0; i < vaults.length; i++) {
-            _zapMonTo(vaults[i], amounts[i]);
+            _zapMonTo(vaults[i], amounts[i], minSharesOut[i]);
         }
     }
 
@@ -87,7 +106,8 @@ contract YieldZapRouter is Ownable, ReentrancyGuard {
     ///         vault in one tx after approval; shares go to the caller.
     function zapErc20(
         address vault,
-        uint256 assets
+        uint256 assets,
+        uint256 minSharesOut
     ) external nonReentrant returns (uint256 shares) {
         if (!whitelistedVaults[vault]) revert VaultNotWhitelisted(vault);
         if (assets == 0) revert ZeroAmount();
@@ -95,17 +115,23 @@ contract YieldZapRouter is Ownable, ReentrancyGuard {
         IERC20(asset).safeTransferFrom(msg.sender, address(this), assets);
         IERC20(asset).forceApprove(vault, assets);
         shares = IERC4626(vault).deposit(assets, msg.sender);
+        if (shares < minSharesOut) revert SlippageExceeded(shares, minSharesOut);
         emit Zap(msg.sender, vault, asset, assets, shares);
     }
 
     // ------------------------------------------------------------- internal
 
-    function _zapMonTo(address vault, uint256 amount) private returns (uint256 shares) {
+    function _zapMonTo(
+        address vault,
+        uint256 amount,
+        uint256 minSharesOut
+    ) private returns (uint256 shares) {
         if (!whitelistedVaults[vault]) revert VaultNotWhitelisted(vault);
         if (amount == 0) revert ZeroAmount();
         IWMON(wmon).deposit{value: amount}();
         IERC20(wmon).forceApprove(vault, amount);
         shares = IERC4626(vault).deposit(amount, msg.sender);
+        if (shares < minSharesOut) revert SlippageExceeded(shares, minSharesOut);
         emit Zap(msg.sender, vault, wmon, amount, shares);
     }
 }
