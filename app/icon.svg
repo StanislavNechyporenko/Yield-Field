@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <path d="M300 16c92 0 178 30 234 92 54 60 62 144 52 228-10 82-44 156-106 206-60 48-140 60-220 46-78-14-146-56-192-122C24 400 8 316 26 238 46 152 104 86 182 48 220 30 260 16 300 16Z" fill="#14121B"/>
+  <text x="158" y="422" font-family="Arial, Helvetica, sans-serif" font-size="336" font-weight="800" fill="#F7F4FF">Y</text>
+  <text x="286" y="422" font-family="Arial, Helvetica, sans-serif" font-size="336" font-weight="800" fill="#A78BFA">F</text>
+  <circle cx="452" cy="120" r="23" fill="#A78BFA"/>
+</svg>

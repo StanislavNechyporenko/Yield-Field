@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# env — never commit secrets
+.env
+.env.local
+.env*.local
+
+# hardhat
+artifacts/
+cache/
+typechain-types/
+coverage/
+coverage.json
+
+# misc
+.DS_Store
+*.log
+.vercel
+tsconfig.tsbuildinfo

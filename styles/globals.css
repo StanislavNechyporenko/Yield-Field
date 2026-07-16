@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease;
+}
+
+/* Split-flap "station board" digit roll: characters that change remount
+   (keyed by position+char) and flip in around their bottom edge. */
+.flip-text {
+  display: inline-flex;
+  perspective: 420px;
+  white-space: pre;
+}
+
+.flip-char {
+  display: inline-block;
+  transform-origin: 50% 100%;
+  backface-visibility: hidden;
+  animation: flapIn 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes flapIn {
+  0% {
+    transform: rotateX(88deg);
+    opacity: 0;
+  }
+  55% {
+    transform: rotateX(-12deg);
+    opacity: 1;
+  }
+  100% {
+    transform: rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-char {
+    animation: none;
+  }
+}
