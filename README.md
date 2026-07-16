@@ -7,12 +7,12 @@ One place where investors see every DeFi protocol on Monad with live APY, calcul
 
 ## Features
 
-- 📊 8 Monad protocols in one list (Aave V3, Morpho Blue, Euler V2, Curvance, Ambient, Wombat, aPriori, TimeSwap)
-- 🧮 Yield calculator — amount × timeframe (day / week / month / year)
-- 🔍 Filter by category (Lending / DEX / Yield Farming) and sort by APY, TVL, or risk
-- 👛 Wallet connection (MetaMask, WalletConnect) via wagmi
-- ⛓ One-click deposit through the `ProtocolAggregator` contract (Aave V3 and Morpho Blue in this MVP)
-- 📡 `/api/protocols` enriches TVL from DeFiLlama with a 5-minute in-memory cache and static fallback
+- 8 Monad protocols in one list (Aave V3, Morpho Blue, Euler V2, Curvance, Ambient, Wombat, aPriori, TimeSwap)
+- Yield calculator — amount × timeframe (day / week / month / year)
+- Filter by category (Lending / DEX / Yield Farming) and sort by APY, TVL, or risk
+- Wallet connection (MetaMask, WalletConnect) via wagmi
+- One-click deposit through the `ProtocolAggregator` contract (Aave V3 and Morpho Blue in this MVP)
+- `/api/protocols` enriches TVL from DeFiLlama with a 5-minute in-memory cache and static fallback
 
 ## Stack
 
