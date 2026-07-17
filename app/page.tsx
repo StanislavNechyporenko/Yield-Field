@@ -1,350 +1,219 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAccount } from 'wagmi';
-import ConnectWallet from '@/components/ConnectWallet';
-import FlipText from '@/components/FlipText';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import FloatingBackground from '@/components/FloatingBackground';
-import MainnetPositions from '@/components/MainnetPositions';
-import Portfolio from '@/components/Portfolio';
 import ProtocolIcon from '@/components/ProtocolIcon';
-import ProtocolList from '@/components/ProtocolList';
-import YieldCalculator from '@/components/YieldCalculator';
-import { formatAmount, formatTVL, formatUSD } from '@/utils/format';
-import {
-  invest,
-  MAINNET_ZAPS,
-  ON_CHAIN_PROTOCOLS,
-  ROUTER_ADDRESS,
-  zapInvest,
-  type InvestStatus,
-} from '@/utils/invest';
-import {
-  TIMEFRAME_DAYS,
-  type AssetPrices,
-  type InvestAsset,
-  type Protocol,
-  type Timeframe,
-} from '@/utils/types';
+import type { Protocol } from '@/utils/types';
 
-const INVEST_LABELS: Record<Exclude<InvestStatus, 'idle' | 'error'>, string> = {
-  approving: 'Approving…',
-  depositing: 'Depositing…',
-  success: 'Deposited successfully',
-};
+const ROUTER_ADDRESS = process.env.NEXT_PUBLIC_ROUTER_ADDRESS;
 
-export default function Home() {
-  const [investmentAmount, setInvestmentAmount] = useState<number>(1000);
-  const [selectedProtocol, setSelectedProtocol] = useState<string | null>(null);
-  const [selectedAsset, setSelectedAsset] = useState<InvestAsset>('MON');
-  const [prices, setPrices] = useState<AssetPrices>({ MON: 0, USDC: 1, USDT: 1, AUSD: 1 });
+const STEPS = [
+  {
+    title: 'Pick what you hold',
+    text: 'MON, USDC, USDT or AUSD — the list instantly narrows to pools that accept your asset.',
+  },
+  {
+    title: 'Compare honest numbers',
+    text: 'Live rates pulled from the protocols’ own APIs, risk scored by a formula, and your yield shown in real money, not just percentages.',
+  },
+  {
+    title: 'Invest in one click',
+    text: 'Our non-custodial router on Monad mainnet wraps and deposits in a single transaction. The position lands in your wallet, not ours.',
+  },
+];
+
+export default function Landing() {
   const [protocols, setProtocols] = useState<Protocol[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [timeframe, setTimeframe] = useState<Timeframe>('month');
-  const [investStatus, setInvestStatus] = useState<InvestStatus>('idle');
-  const [investError, setInvestError] = useState<string | null>(null);
-  const [portfolioRefresh, setPortfolioRefresh] = useState(0);
-  const { isConnected } = useAccount();
-
-  const fetchProtocols = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/protocols');
-      if (!res.ok) throw new Error(`API responded ${res.status}`);
-      const data: { protocols: Protocol[]; prices?: AssetPrices } = await res.json();
-      setProtocols(data.protocols);
-      if (data.prices) setPrices(data.prices);
-    } catch {
-      setProtocols([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    fetchProtocols();
-  }, [fetchProtocols]);
+    fetch('/api/protocols')
+      .then((res) => res.json())
+      .then((data: { protocols?: Protocol[] }) => setProtocols(data.protocols ?? []))
+      .catch(() => {});
+  }, []);
 
-  const assetProtocols = useMemo(
-    () => protocols.filter((p) => (p.asset ?? 'MON') === selectedAsset),
-    [protocols, selectedAsset]
-  );
-
-  const selected = useMemo(
-    () => assetProtocols.find((p) => p.id === selectedProtocol),
-    [assetProtocols, selectedProtocol]
-  );
-
-  const handleAssetChange = (asset: InvestAsset) => {
-    setSelectedAsset(asset);
-    setSelectedProtocol(null);
-    setInvestStatus('idle');
-    setInvestError(null);
-  };
-
-  const calculateYield = (protocol: Protocol | undefined): number => {
-    if (!protocol) return 0;
-    return investmentAmount * (protocol.apy / 100) * (TIMEFRAME_DAYS[timeframe] / 365);
-  };
-
-  const estimatedYield = calculateYield(selected);
-  const investing = investStatus === 'approving' || investStatus === 'depositing';
-  const isExternal = selected?.investType === 'external';
-  const onChainReady = selected ? !isExternal && selected.id in ON_CHAIN_PROTOCOLS : false;
-  const zapReady = Boolean(selected && ROUTER_ADDRESS && selected.id in MAINNET_ZAPS);
-  const assetPrice = prices[selectedAsset] ?? 0;
-
-  const handleSelectProtocol = (id: string) => {
-    setSelectedProtocol(id);
-    setInvestStatus('idle');
-    setInvestError(null);
-  };
-
-  const handleInvest = async () => {
-    if (!selected || investing) return;
-    if (!isConnected) {
-      setInvestError('Connect your wallet first.');
-      return;
+  // One card per protocol: its best pool across assets.
+  const uniqueProtocols = useMemo(() => {
+    const byName = new Map<string, { protocol: Protocol; assets: string[] }>();
+    for (const p of protocols) {
+      const existing = byName.get(p.name);
+      if (!existing) {
+        byName.set(p.name, { protocol: p, assets: p.asset ? [p.asset] : [] });
+      } else {
+        if (p.apy > existing.protocol.apy) existing.protocol = p;
+        if (p.asset && !existing.assets.includes(p.asset)) existing.assets.push(p.asset);
+      }
     }
-    setInvestError(null);
-    try {
-      await invest(selected.id, investmentAmount, setInvestStatus);
-      setPortfolioRefresh((n) => n + 1);
-    } catch (err) {
-      setInvestStatus('error');
-      const message =
-        (err as { shortMessage?: string })?.shortMessage ??
-        (err instanceof Error ? err.message : 'Transaction failed.');
-      setInvestError(message);
-    }
-  };
+    return [...byName.values()].sort((a, b) => b.protocol.apy - a.protocol.apy);
+  }, [protocols]);
 
-  const handleZapInvest = async () => {
-    if (!selected || investing) return;
-    if (!isConnected) {
-      setInvestError('Connect your wallet first.');
-      return;
-    }
-    setInvestError(null);
-    try {
-      await zapInvest(selected.id, investmentAmount, setInvestStatus);
-      setPortfolioRefresh((n) => n + 1);
-    } catch (err) {
-      setInvestStatus('error');
-      const message =
-        (err as { shortMessage?: string })?.shortMessage ??
-        (err instanceof Error ? err.message : 'Transaction failed.');
-      setInvestError(message);
-    }
-  };
+  const bestApy = uniqueProtocols[0]?.protocol.apy;
 
   return (
     <>
       <FloatingBackground />
+
       <header className="sticky top-0 z-10 border-b border-ink/10 bg-canvas/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1160px] items-center justify-between px-8 py-3.5">
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.svg" alt="Yield Field" className="h-8 w-8" />
             <span className="text-[17px] font-semibold tracking-[-0.01em]">Yield Field</span>
             <span className="rounded-full bg-ink/5 px-[9px] py-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-ink/45">
               Monad
             </span>
-          </div>
-          <ConnectWallet />
+          </Link>
+          <Link
+            href="/app"
+            className="min-h-[40px] rounded-full bg-accent px-5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#5B3FD9]"
+          >
+            Launch App
+          </Link>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1160px] px-8 pb-20 pt-8">
-        <div className="flex flex-wrap items-start gap-6">
-          <div className="max-w-[380px] flex-[1_1_340px]">
-            <YieldCalculator
-              amount={investmentAmount}
-              onAmountChange={setInvestmentAmount}
-              asset={selectedAsset}
-              onAssetChange={handleAssetChange}
-              assetPriceUsd={assetPrice}
-              timeframe={timeframe}
-              onTimeframeChange={setTimeframe}
-              estimatedYield={estimatedYield}
-              selectedProtocol={selected}
-            />
+      <main className="mx-auto max-w-[1160px] px-8 pb-24">
+        {/* Hero */}
+        <section className="flex flex-col items-center py-24 text-center">
+          <h1 className="max-w-[760px] text-5xl font-semibold leading-[1.08] tracking-[-0.02em] md:text-6xl">
+            Every yield on Monad.
+            <br />
+            <span className="text-accent">One screen.</span>
+          </h1>
+          <p className="mt-6 max-w-[560px] text-lg leading-relaxed text-ink/55">
+            Yield Field is a DeFi aggregator for everyday people who&apos;d love to see the
+            ecosystem&apos;s possibilities in one place: what your assets would approximately
+            earn across the protocols - and a way in without leaving the page.
+          </p>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/app"
+              className="inline-flex min-h-[48px] items-center rounded-full bg-accent px-7 text-[15px] font-semibold text-white transition-colors hover:bg-[#5B3FD9]"
+            >
+              Compare yields now
+            </Link>
+            <a
+              href="https://github.com/StanislavNechyporenko/Yield-Field"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[48px] items-center rounded-full bg-ink/5 px-7 text-[15px] font-semibold text-ink/70 transition-colors hover:bg-ink/10"
+            >
+              GitHub
+            </a>
           </div>
-          <div className="min-w-0 flex-[2_1_560px]">
-            <ProtocolList
-              protocols={assetProtocols}
-              selectedProtocol={selectedProtocol}
-              onSelectProtocol={handleSelectProtocol}
-              loading={loading}
-              investmentAmount={investmentAmount}
-            />
+
+          <div className="mt-14 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-ink/50">
+            <span>
+              <span className="font-semibold text-ink">{protocols.length || '—'}</span> live
+              pools
+            </span>
+            <span>
+              best right now{' '}
+              <span className="font-semibold text-accent">
+                {bestApy ? `~${bestApy.toFixed(1)}% APY` : '—'}
+              </span>
+            </span>
+            <span>
+              <span className="font-semibold text-ink">4</span> assets: MON · USDC · USDT ·
+              AUSD
+            </span>
+            <span>
+              <span className="font-semibold text-ink">non-custodial</span> router on mainnet
+            </span>
           </div>
-        </div>
+        </section>
 
-        {selected && (
-          <section className="animate-fade-in mt-6 rounded-3xl bg-ink p-7">
-            <div className="mb-6 flex items-center gap-3.5">
-              <ProtocolIcon name={selected.name} size={42} radius={12} />
-              <div>
-                <h2 className="text-lg font-semibold text-white">{selected.name}</h2>
-                <p className="mt-0.5 text-[13px] text-white/55">{selected.description}</p>
-              </div>
-            </div>
-
-            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded-[14px] bg-white/5 p-4">
-                <p className="mb-1 text-[11px] text-white/50">Investment</p>
-                <p className="text-[15px] font-semibold text-white">
-                  <FlipText text={formatAmount(investmentAmount, selectedAsset)} />
-                </p>
-                {assetPrice > 0 && (
-                  <p className="mt-0.5 text-[11px] text-white/40">
-                    ≈ {formatUSD(investmentAmount * assetPrice)}
-                  </p>
-                )}
-              </div>
-              <div className="rounded-[14px] bg-white/5 p-4">
-                <p className="mb-1 text-[11px] text-white/50">APY</p>
-                <p className="text-[15px] font-semibold text-accent-light">
-                  ~{selected.apy.toFixed(1)}%
-                </p>
-              </div>
-              <div className="rounded-[14px] bg-white/5 p-4">
-                <p className="mb-1 text-[11px] text-white/50">Est. yield / {timeframe}</p>
-                <p className="text-[15px] font-semibold text-accent-light">
-                  <FlipText text={`+${formatAmount(estimatedYield, selectedAsset)}`} />
-                </p>
-                {assetPrice > 0 && (
-                  <p className="mt-0.5 text-[11px] text-white/40">
-                    ≈ {formatUSD(estimatedYield * assetPrice)}
-                  </p>
-                )}
-              </div>
-              <div className="rounded-[14px] bg-white/5 p-4">
-                <p className="mb-1 text-[11px] text-white/50">TVL / Risk</p>
-                <p className="text-[15px] font-semibold text-white">
-                  {formatTVL(selected.tvl)}{' '}
-                  <span className="font-medium capitalize text-white/50">
-                    · {selected.riskLevel}
-                  </span>
-                </p>
-              </div>
-            </div>
-
-            {isExternal && zapReady ? (
-              <>
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleZapInvest}
-                    disabled={investing}
-                    className="min-h-[44px] rounded-full bg-accent px-6 text-sm font-semibold text-white transition-colors hover:bg-[#5B3FD9] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {investStatus in INVEST_LABELS
-                      ? INVEST_LABELS[investStatus as keyof typeof INVEST_LABELS]
-                      : `⚡ Invest ${formatAmount(investmentAmount, selectedAsset)} via Yield Field`}
-                  </button>
-                  {selected.url && (
-                    <a
-                      href={selected.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex min-h-[44px] items-center rounded-full bg-white/10 px-5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-                    >
-                      or open {selected.name} ↗
-                    </a>
-                  )}
+        {/* How it works */}
+        <section className="py-10">
+          <h2 className="mb-8 text-center text-2xl font-semibold">How it works</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {STEPS.map((step, i) => (
+              <div
+                key={step.title}
+                className="rounded-3xl border border-ink/10 bg-white p-7 shadow-[0_1px_2px_rgba(20,18,27,0.04)]"
+              >
+                <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-accent/[0.14] text-sm font-bold text-accent">
+                  {i + 1}
                 </div>
-                <p className="mt-2.5 text-xs text-white/45">
-                  One transaction through our on-chain YieldZapRouter — the position lands
-                  straight in your wallet, Yield Field never holds your funds. Unaudited MVP
-                  contract.
-                </p>
-              </>
-            ) : isExternal && selected.url ? (
-              <>
-                <a
-                  href={selected.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-accent px-6 text-sm font-semibold text-white transition-colors hover:bg-[#5B3FD9]"
-                >
-                  Open {selected.name} ↗
-                </a>
-                <p className="mt-2.5 text-xs text-white/45">
-                  You&apos;ll deposit directly on the protocol&apos;s own app (Monad mainnet) —
-                  Yield Field never holds your funds.
-                </p>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={handleInvest}
-                  disabled={investing || !onChainReady}
-                  className="min-h-[44px] rounded-full bg-accent px-6 text-sm font-semibold text-white transition-colors hover:bg-[#5B3FD9] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {investStatus in INVEST_LABELS
-                    ? INVEST_LABELS[investStatus as keyof typeof INVEST_LABELS]
-                    : `Invest in ${selected.name}`}
-                </button>
-                {onChainReady ? (
-                  <p className="mt-2.5 text-xs text-white/45">
-                    Deposits are sent in native testnet MON — one transaction, no approval
-                    needed.
-                  </p>
-                ) : (
-                  <p className="mt-2.5 text-[13px] text-white/55">
-                    On-chain deposits are available for Aave V3 and Morpho Blue in this MVP.
-                  </p>
-                )}
-              </>
-            )}
-            {selected.earnsPoints && (
-              <p className="mt-2.5 text-xs text-accent-light">
-                ✦ Staking here also earns {selected.name} project points on top of the APY
-                shown.
-              </p>
-            )}
-            {selected.pairedYield && (
-              <p className="mt-2.5 text-xs text-white/55">
-                ⇄ Paired / leveraged strategies (multiply, looping) up to ~
-                {selected.pairedYield.upToApy.toFixed(1)}% APY are available on the
-                protocol&apos;s app.
-              </p>
-            )}
-            {investError && <p className="mt-2.5 text-[13px] text-red-300">{investError}</p>}
-            {investStatus === 'success' && (
-              <p className="mt-2.5 text-[13px] text-accent-light">
-                Deposit confirmed on-chain. Track it in your wallet or the Monad explorer.
-              </p>
-            )}
+                <h3 className="mb-2 text-[15px] font-semibold">{step.title}</h3>
+                <p className="text-sm leading-relaxed text-ink/55">{step.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
-            <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
-              <a
-                href={`/api/og?protocol=${encodeURIComponent(selected.name)}&apy=${selected.apy}&asset=${selectedAsset}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-[36px] items-center gap-2 rounded-full bg-white/10 px-4 text-xs font-semibold text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-              >
-                📤 Share card
-              </a>
-              <a
-                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
-                  `I'm earning ~${selected.apy}% APY on ${selectedAsset} with ${selected.name} — found it on Yield Field, the DeFi yield aggregator for Monad 🟣`
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-[36px] items-center gap-2 rounded-full bg-white/10 px-4 text-xs font-semibold text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-              >
-                Post on X ↗
-              </a>
+        {/* Protocols */}
+        <section className="py-10">
+          <h2 className="mb-2 text-center text-2xl font-semibold">
+            The protocols, side by side
+          </h2>
+          <p className="mb-8 text-center text-sm text-ink/50">
+            Live rates — the same numbers the protocols show in their own apps.
+          </p>
+          {uniqueProtocols.length === 0 ? (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-24 animate-pulse rounded-3xl bg-ink/5" />
+              ))}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              {uniqueProtocols.map(({ protocol, assets }) => (
+                <Link
+                  key={protocol.name}
+                  href={`/app?p=${encodeURIComponent(protocol.id)}`}
+                  className="group rounded-3xl border border-ink/10 bg-white p-5 shadow-[0_1px_2px_rgba(20,18,27,0.04)] transition-colors hover:border-accent/40"
+                >
+                  <div className="flex items-center gap-3">
+                    <ProtocolIcon name={protocol.name} size={38} radius={11} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{protocol.name}</p>
+                      <p className="text-xs text-ink/45">{assets.join(' · ')}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-lg font-bold text-accent">
+                    ~{protocol.apy.toFixed(1)}%{' '}
+                    <span className="text-xs font-medium text-ink/40">APY</span>
+                  </p>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
 
-        <Portfolio refreshKey={portfolioRefresh} />
-        <MainnetPositions prices={prices} refreshKey={portfolioRefresh} />
+        {/* Non-custodial */}
+        <section className="py-10">
+          <div className="rounded-3xl bg-ink p-10 text-center">
+            <h2 className="text-2xl font-semibold text-white">
+              Your money never touches our hands
+            </h2>
+            <p className="mx-auto mt-3 max-w-[560px] text-sm leading-relaxed text-white/55">
+              One-click deposits go through an on-chain router that holds nothing: your
+              position is minted straight to your wallet in the same transaction. Open source,
+              covered by tests, live on Monad mainnet.
+            </p>
+            {ROUTER_ADDRESS && (
+              <p className="mt-5 break-all font-mono text-xs text-accent-light">
+                {ROUTER_ADDRESS}
+              </p>
+            )}
+            <Link
+              href="/app"
+              className="mt-7 inline-flex min-h-[48px] items-center rounded-full bg-accent px-7 text-[15px] font-semibold text-white transition-colors hover:bg-[#5B3FD9]"
+            >
+              Launch App
+            </Link>
+          </div>
+        </section>
+
+        <footer className="pt-10 text-center text-xs leading-relaxed text-ink/40">
+          <p>
+            Yields are estimates based on current rates and are not guaranteed. Yield Field is
+            an aggregation interface — deposits go to third-party protocols at your own risk.
+          </p>
+          <p className="mt-2">Built for the Monad ecosystem.</p>
+        </footer>
       </main>
     </>
   );
