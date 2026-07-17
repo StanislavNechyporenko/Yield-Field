@@ -60,6 +60,15 @@ const MAINNET_PROJECTS: {
     url: 'https://app.aave.com',
   },
   {
+    slug: 'morpho-blue',
+    id: 'morpho',
+    name: 'Morpho',
+    category: 'lending',
+    logo: '🦋',
+    description: 'Curated lending vaults built on isolated markets.',
+    url: 'https://app.morpho.org',
+  },
+  {
     slug: 'euler-v2',
     id: 'euler-v2',
     name: 'Euler V2',
@@ -137,11 +146,13 @@ const MAINNET_PROJECTS: {
 ];
 
 // Which DeFiLlama pool symbols count as which deposit asset.
+// Curated vaults often wrap an asset under their own symbol (HYPERUSDCA is
+// Hyperithm's USDC vault on Morpho, CSAAUSD is an AUSD vault, …).
 const ASSET_MATCHERS: Record<InvestAsset, (symbol: string) => boolean> = {
   MON: (s) => ['SHMON', 'SMON', 'GMON', 'APRMON'].includes(s),
-  USDC: (s) => s === 'USDC',
+  USDC: (s) => ['USDC', 'HYPERUSDCA', 'AUGUSTUSDCV2'].includes(s),
   USDT: (s) => s === 'USDT0' || s === 'USDT',
-  AUSD: (s) => s === 'AUSD' || s === 'EARNAUSD',
+  AUSD: (s) => ['AUSD', 'EARNAUSD', 'CSAAUSD'].includes(s),
 };
 
 const MIN_POOL_TVL_USD = 500_000;
