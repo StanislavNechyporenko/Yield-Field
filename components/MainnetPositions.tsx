@@ -121,7 +121,8 @@ export default function MainnetPositions({
         source.secondHop?.kind === 'erc4626'
           ? ((secondConversions.data?.[i]?.result as bigint | undefined) ?? hop1)
           : hop1;
-      const approx = source.kind === 'erc20' || source.secondHop?.kind === 'erc20';
+      const approx =
+        (source.kind === 'erc20' && !source.exact) || source.secondHop?.kind === 'erc20';
       return {
         ...source,
         raw,

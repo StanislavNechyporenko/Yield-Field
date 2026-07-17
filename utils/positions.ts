@@ -17,11 +17,14 @@ export interface PositionSource {
    * erc4626 hop converts exactly; erc20 hop keeps the amount ≈1:1.
    */
   secondHop?: { token: `0x${string}`; kind: 'erc4626' | 'erc20' };
+  /** erc20 receipts that rebase 1:1 with the asset (Aave aTokens) are exact, not ≈. */
+  exact?: boolean;
 }
 
 const SHMON = '0x1B68626dCa36c7fE922fD2d55E4f631d962dE19c' as const;
 const SMON = '0xA3227C5969757783154C60bF0bC1944180ed81B9' as const;
 const GMON = '0x8498312A6B3CbD158bf0c93AbdCF29E6e4F55081' as const;
+const APRMON = '0x0c65A0BC65a5D819235B71F554D210D3F80E0852' as const;
 
 // Plain asset balances shown as "available in wallet".
 export const WALLET_TOKENS: {
@@ -78,7 +81,58 @@ export const POSITION_SOURCES: PositionSource[] = [
     asset: 'MON',
     decimals: 18,
   },
+  {
+    id: 'apriori',
+    protocol: 'aPriori',
+    tokenSymbol: 'aprMON',
+    token: APRMON,
+    kind: 'erc4626',
+    asset: 'MON',
+    decimals: 18,
+  },
+  // Aave V3 lending: rebasing aTokens, balance equals the underlying 1:1
+  // (addresses from the monad-crypto/protocols registry, verified on-chain).
+  {
+    id: 'aave-usdt0',
+    protocol: 'Aave V3',
+    tokenSymbol: 'aUSDT0',
+    token: '0x9531E6bC99D7F7f0596ed7bA5b846Ba9Eb60468c',
+    kind: 'erc20',
+    asset: 'USDT',
+    decimals: 6,
+    exact: true,
+  },
+  {
+    id: 'aave-usdc',
+    protocol: 'Aave V3',
+    tokenSymbol: 'aUSDC',
+    token: '0x35a73BAcb179d3740395A3ceCc87FF2e581d6042',
+    kind: 'erc20',
+    asset: 'USDC',
+    decimals: 6,
+    exact: true,
+  },
+  {
+    id: 'aave-ausd',
+    protocol: 'Aave V3',
+    tokenSymbol: 'aAUSD',
+    token: '0xdeBFeDF35faEd5d1664E553545e144C02227A2Ec',
+    kind: 'erc20',
+    asset: 'AUSD',
+    decimals: 6,
+    exact: true,
+  },
   // Curvance LST markets: cToken → LST → MON (two conversion hops).
+  {
+    id: 'curvance-aprmon',
+    protocol: 'Curvance · aprMON mkt',
+    tokenSymbol: 'caprMON',
+    token: '0xD9E2025b907E95EcC963A5018f56B87575B4aB26',
+    kind: 'erc4626',
+    asset: 'MON',
+    decimals: 18,
+    secondHop: { token: APRMON, kind: 'erc4626' },
+  },
   {
     id: 'curvance-shmon',
     protocol: 'Curvance · shMON mkt',
