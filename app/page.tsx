@@ -66,7 +66,7 @@ export default function Landing() {
           </Link>
           <Link
             href="/app"
-            className="min-h-[40px] rounded-full bg-accent px-5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#5B3FD9]"
+            className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-accent px-6 text-sm font-semibold text-white transition-colors hover:bg-[#5B3FD9]"
           >
             Launch App
           </Link>
@@ -149,7 +149,7 @@ export default function Landing() {
             The protocols, side by side
           </h2>
           <p className="mb-8 text-center text-sm text-ink/50">
-            Live rates — the same numbers the protocols show in their own apps.
+            Live rates - the same numbers the protocols show in their own apps.
           </p>
           {uniqueProtocols.length === 0 ? (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -194,9 +194,17 @@ export default function Landing() {
               covered by tests, live on Monad mainnet.
             </p>
             {ROUTER_ADDRESS && (
-              <p className="mt-5 break-all font-mono text-xs text-accent-light">
-                {ROUTER_ADDRESS}
-              </p>
+              <div className="mt-5">
+                <a
+                  href={`https://monadexplorer.com/address/${ROUTER_ADDRESS}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block break-all font-mono text-xs text-accent-light underline-offset-4 transition-colors hover:text-white hover:underline"
+                  title="View the router on Monad Explorer"
+                >
+                  {ROUTER_ADDRESS} ↗
+                </a>
+              </div>
             )}
             <Link
               href="/app"
@@ -210,7 +218,7 @@ export default function Landing() {
         <footer className="pt-10 text-center text-xs leading-relaxed text-ink/40">
           <p>
             Yields are estimates based on current rates and are not guaranteed. Yield Field is
-            an aggregation interface — deposits go to third-party protocols at your own risk.
+            an aggregation interface - deposits go to third-party protocols at your own risk.
           </p>
           <p className="mt-2">Built for the Monad ecosystem.</p>
         </footer>

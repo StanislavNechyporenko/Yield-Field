@@ -106,6 +106,16 @@ export default function Home() {
   };
 
   const estimatedYield = calculateYield(selected);
+  // Fills the empty state before the user picks anything: the best pool for
+  // the current asset and what the entered amount would earn there.
+  const bestPick = useMemo(
+    () =>
+      assetProtocols.reduce<Protocol | undefined>(
+        (best, p) => (!best || p.apy > best.apy ? p : best),
+        undefined
+      ),
+    [assetProtocols]
+  );
   const investing = investStatus === 'approving' || investStatus === 'depositing';
   const isExternal = selected?.investType === 'external';
   const onChainReady = selected ? !isExternal && selected.id in ON_CHAIN_PROTOCOLS : false;
@@ -198,6 +208,50 @@ export default function Home() {
             />
           </div>
         </div>
+
+        {!loading && !selected && bestPick && (
+          <section className="animate-fade-in mt-6 rounded-3xl border border-ink/10 bg-white p-7 shadow-[0_1px_2px_rgba(20,18,27,0.04)]">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <ProtocolIcon name={bestPick.name} size={42} radius={12} />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-ink/40">
+                    Best for your {selectedAsset} right now
+                  </p>
+                  <p className="mt-1 text-[15px] font-semibold">
+                    {bestPick.name} · <span className="text-accent">~{bestPick.apy.toFixed(1)}% APY</span>
+                    <span className="font-medium text-ink/45">
+                      {' '}
+                      → +{formatAmount(calculateYield(bestPick), selectedAsset)} / {timeframe}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSelectProtocol(bestPick.id)}
+                className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-accent px-6 text-sm font-semibold text-white transition-colors hover:bg-[#5B3FD9]"
+              >
+                Review &amp; invest
+              </button>
+            </div>
+          </section>
+        )}
+
+        {!isConnected && (
+          <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-dashed border-ink/15 bg-white/60 p-7">
+            <div className="max-w-[560px]">
+              <p className="text-[15px] font-semibold">
+                Your Monad portfolio, one connect away
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-ink/50">
+                Connect a wallet and Yield Field will find your staking and lending positions
+                across the ecosystem — read straight from the chain, nothing to sign.
+              </p>
+            </div>
+            <ConnectWallet />
+          </section>
+        )}
 
         {selected && (
           <section id="protocol-details" className="animate-fade-in mt-6 rounded-3xl bg-ink p-7">
